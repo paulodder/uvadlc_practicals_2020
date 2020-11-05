@@ -2,12 +2,15 @@
 
  You can find all necessary instructions in **assignment_1.pdf**.
 
- We provide to you simple unit tests that can check your implementation. However be aware that even if all tests are passed it still doesn't mean that your implementation is correct. You can find tests in **unittests.py**. 
- 
- 
+ We provide to you simple unit tests that can check your
+ implementation. However be aware that even if all tests are passed it still
+ doesn't mean that your implementation is correct. You can find tests in
+ **unittests.py**.
 
- We also provide a Conda environment you can use to install the necessary Python packages. 
- In order to use it on SURFSARA, follow this instructions:
+
+
+ We also provide a Conda environment you can use to install the necessary
+ Python packages.  In order to use it on SURFSARA, follow this instructions:
 
 
 - add the following lines in your ".bashrc":
@@ -31,7 +34,7 @@ conda env create -f environment_Lisa.yml
 ```
 source activate dl2020
 ```
-    
+
 for further information about Conda/Miniconda:
 
 https://docs.conda.io/projects/conda/en/latest/
