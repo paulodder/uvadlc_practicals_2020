@@ -173,7 +173,8 @@ class CrossEntropyModule(object):
         ########################
         # PUT YOUR CODE HERE  #
         #######################
-        out = (-(np.log(x) * y)).sum()
+        S = x.shape[0]
+        out = 1 / S * (-(np.log(x) * y)).sum()
         ########################
         # END OF YOUR CODE    #
         #######################
@@ -227,10 +228,11 @@ class ELUModule(object):
         ########################
         # PUT YOUR CODE HERE  #
         #######################
+        # self.mask = x[:]
+        self.exp = np.exp(x)
         self.x = x
-        out = x[:]
-        out[x < 0] = np.exp(x[x < 0]) - 1
-
+        mask = x < 0
+        out = np.where(mask, self.exp - 1, x)
         ########################
         # END OF YOUR CODE    #
         #######################
@@ -252,9 +254,14 @@ class ELUModule(object):
         ########################
         # PUT YOUR CODE HERE  #
         #######################
-        x_der = self.x[:]
-        x_der[x_der >= 0] = 1
-        dx = dout * x_der
+        # x_der = self.x
+        # print(x_der)
+        # x_der[x_der >= 0] = 1
+        # print(x_der)
+        # mask = self.x < 0
+        # x_der[mask] = self.exp[mask]
+        # print(x_der)
+        dx = dout * np.where(self.x < 0, self.exp, np.ones_like(self.x))
         ########################
         # END OF YOUR CODE    #
         #######################
