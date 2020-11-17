@@ -171,7 +171,7 @@ def main():
     Main function
     """
     # Print all Flags to confirm parameter settings
-    # print_flags()
+    print_flags()
 
     if not os.path.exists(FLAGS.data_dir):
         os.makedirs(FLAGS.data_dir)
