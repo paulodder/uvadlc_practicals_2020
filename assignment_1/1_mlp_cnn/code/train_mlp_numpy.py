@@ -14,7 +14,8 @@ import os
 from mlp_numpy import MLP, Optimizer
 from modules import CrossEntropyModule
 import cifar10_utils
-from mock import mock
+
+# from mock import mock
 import dotenv
 from pathlib import Path
 
@@ -69,7 +70,7 @@ def accuracy(predictions, targets):
 
 def plot_loss_accs(losses, accs):
     plt.clf()
-    fig, ax = plt.subplots(2)
+    fig, ax = plt.subplots(2, sharex=True)
     x = [i * int(FLAGS.eval_freq) for i in range(len(losses))]
     for ind, (name, vals) in enumerate(
         zip(["loss", "accuracy"], [losses, accs])
@@ -77,7 +78,7 @@ def plot_loss_accs(losses, accs):
         ax[ind].plot(x, vals, label=name)
         ax[ind].set_xlabel("# batches trained on")
         ax[ind].set_ylabel(name)
-    # fig.suptitle("loss and accuracy plots
+        # fig.suptitle("loss and accuracy plots
     fname = f"{param2fname_prefix(FLAGS)}_loss_accuracy.png"
     fpath = FIGURE_DIR / fname
     print(f"saving to {fpath}")
@@ -135,18 +136,18 @@ def train():
     X_test, y_test = name2dset["test"].images, name2dset["test"].labels
     X_test = X_test.reshape(X_test.shape[0], INPUT_SIZE)
     while nof_steps < FLAGS.max_steps:
-        x_train, y_train = train_handler.next_batch(FLAGS.batch_size)
-        x_train = x_train.reshape(FLAGS.batch_size, INPUT_SIZE)
-        preds = mlp.forward(x_train)
-        loss_grad = loss_module.backward(preds, y_train)
-        mlp.backward(loss_grad)
-        optimizer.step()
         if nof_steps % FLAGS.eval_freq == 0:
             y_pred = mlp.forward(X_test)
             acc = accuracy(y_pred, y_test)
             accs.append(acc)
             losses.append(loss_module.forward(y_pred, y_test))
             print(f"{nof_steps} batches:\tAccuracy {acc}")
+        x_train, y_train = train_handler.next_batch(FLAGS.batch_size)
+        x_train = x_train.reshape(FLAGS.batch_size, INPUT_SIZE)
+        preds = mlp.forward(x_train)
+        loss_grad = loss_module.backward(preds, y_train)
+        mlp.backward(loss_grad)
+        optimizer.step()
         nof_steps += 1
 
     if FLAGS.plot:

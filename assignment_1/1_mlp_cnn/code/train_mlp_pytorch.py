@@ -43,7 +43,9 @@ OPTIM_NAME2OBJ = {
     "ADAM": torch.optim.Adam,
     "SGD": torch.optim.SGD,
 }
-ACTIVATION_NAME2OBJ = {"ELU": nn.ELU}
+# DEFAULT_SCHEDULER = None
+# SCHEDULER_NAME2OBJ = {"STEPLR": torch.optim.lr_scheduler.StepLR}
+ACTIVATION_NAME2OBJ = {"ELU": nn.ELU, "TANH": nn.Tanh}
 
 
 def accuracy(predictions, targets):
@@ -115,13 +117,22 @@ def train():
     )
     train_handler = name2dset["train"]
     loss = nn.CrossEntropyLoss()
-    mlp = MLP(INPUT_SIZE, dnn_hidden_units, 10)  # NEG_SLOPE_DEFAULT
+    # loss = nn.NLLLoss()
+    activation_func = ACTIVATION_NAME2OBJ[FLAGS.activation]
+    mlp = MLP(
+        INPUT_SIZE,
+        dnn_hidden_units,
+        10,
+        activation_func=activation_func,
+        batch_normalization=FLAGS.batch_normalization,
+    )  # NEG_SLOPE_DEFAULT
     nof_steps = 0
     # optimizer = Optimizer(mlp, learning_rate=FLAGS.learning_rate)
     FLAGS.optimizer
     optimizer = OPTIM_NAME2OBJ[FLAGS.optimizer](
         mlp.parameters(), lr=FLAGS.learning_rate
     )
+    # scheduler = SCHEDULER_NAME2OBJ["STEPLR"](optimizer, step_size=466, gamma=1)
     X_val, y_val = (
         name2dset["validation"].images,
         name2dset["validation"].labels,
@@ -130,16 +141,6 @@ def train():
     X_val = torch.from_numpy(X_val)
     y_val = torch.from_numpy(y_val).argmax(1)
     while nof_steps <= FLAGS.max_steps:
-        optimizer.zero_grad()
-        mlp.train()
-        x_train, y_train = train_handler.next_batch(FLAGS.batch_size)
-        x_train = x_train.reshape(FLAGS.batch_size, INPUT_SIZE)
-        x_train = torch.from_numpy(x_train)
-        y_train = torch.from_numpy(y_train.argmax(1))
-        preds = mlp(x_train)
-        loss_output = loss(preds, y_train)
-        loss_output.backward()
-        optimizer.step()
         if nof_steps % FLAGS.eval_freq == 0:
             with torch.no_grad():
                 # optimizer.zero_grad()
@@ -148,6 +149,20 @@ def train():
                 accs.append(acc)
                 losses.append(float(loss(y_pred, y_val).detach()))
                 print(f"{nof_steps} batches:\tAccuracy {acc}")
+        optimizer.zero_grad()
+        mlp.train()
+        x_train, y_train = train_handler.next_batch(FLAGS.batch_size)
+        x_train = x_train.reshape(FLAGS.batch_size, INPUT_SIZE)
+        x_train = torch.from_numpy(x_train)
+        y_train = torch.from_numpy(y_train.argmax(1))
+        preds = mlp.forward(x_train)
+        loss_output = loss(preds, y_train)
+        loss_output.backward()
+        optimizer.step()
+        if FLAGS.stop_if_nan:
+            if loss_output.isnan():
+                break
+        # scheduler.step()
         nof_steps += 1
     if FLAGS.store_progress:
         pf = param2fname_prefix(FLAGS)
@@ -234,7 +249,7 @@ def param2fname_prefix(flags):
 
 def plot_loss_accs(losses, accs):
     plt.clf()
-    fig, ax = plt.subplots(2)
+    fig, ax = plt.subplots(2, sharex=True)
     x = [i * int(FLAGS.eval_freq) for i in range(len(losses))]
     for ind, (name, vals) in enumerate(
         zip(["loss", "accuracy"], [losses, accs])
@@ -322,6 +337,18 @@ def parse_args():
         type=int,
         default=-1,
         help=f"Number of parameter sweep, affects storage directory",
+    )
+    parser.add_argument(
+        "--batch_normalization",
+        type=int,
+        default=0,
+        help="Whether to apply batch normalization",
+    )
+    parser.add_argument(
+        "--stop_if_nan",
+        type=int,
+        default=0,
+        help="Terminate further training if a nan loss is observed",
     )
     return parser.parse_known_args()
 

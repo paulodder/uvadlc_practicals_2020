@@ -9,6 +9,20 @@ import torch.nn as nn
 import itertools as it
 
 
+class PreActResNet(nn.Module):
+    def __init__(self, in_dim, out_dim, kernel_size, stride, padding):
+        super(PreActResNet, self).__init__()
+        print(in_dim, out_dim)
+        self.net = nn.Sequential(
+            nn.BatchNorm2d(out_dim),
+            nn.ReLU(),
+            nn.Conv2d(in_dim, out_dim, kernel_size, stride, padding),
+        )
+
+    def forward(self, x):
+        return self.net(x) + x
+
+
 class ConvNet(nn.Module):
     """
     This class implements a Convolutional Neural Network in PyTorch.
@@ -16,7 +30,7 @@ class ConvNet(nn.Module):
     Once initialized an ConvNet object can perform forward.
     """
 
-    def __init__(self, n_channels, n_classes, ac):
+    def __init__(self, n_channels, n_classes):
         """
         Initializes ConvNet object.
 
@@ -38,10 +52,15 @@ class ConvNet(nn.Module):
             (64, 64),
             (64, 128),
             (128, 128),
+            (128, 128),
+            (128, 128),
             (128, 256),
             (256, 256),
             (256, 256),
+            (256, 256),
             (256, 512),
+            (512, 512),
+            (512, 512),
             (512, 512),
             (512, 512),
             (512, 512),
@@ -52,8 +71,8 @@ class ConvNet(nn.Module):
         def return_conv(in_dim, out_dim, kernel_size, stride, padding):
             return (
                 nn.Conv2d(in_dim, out_dim, kernel_size, stride, padding),
-                nn.BatchNorm2d(out_dim),
-                nn.ReLU(),
+                # nn.BatchNorm2d(out_dim),
+                # nn.ReLU(),
             )
 
         def return_maxpool(in_dim, out_dim, kernel_size, stride, padding):
@@ -63,39 +82,90 @@ class ConvNet(nn.Module):
                 ),
             )
 
+        def return_preact(in_dim, out_dim, kernel_size, stride, padding):
+            return (
+                PreActResNet(in_dim, out_dim, kernel_size, stride, padding),
+            )
+
         layer_types = [
-            return_conv,
+            return_conv,  # 0
+            return_preact,
+            return_conv,  # 1
             return_maxpool,
-            return_conv,
+            return_preact,
+            return_preact,
+            return_conv,  # 2
             return_maxpool,
-            return_conv,
-            return_conv,
+            return_preact,
+            return_preact,
+            return_conv,  # 3
             return_maxpool,
-            return_conv,
-            return_conv,
+            return_preact,
+            return_preact,
             return_maxpool,
-            return_conv,
-            return_conv,
+            return_preact,
+            return_preact,
             return_maxpool,
         ]
-        strides = [1, 2, 1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2]
-        paddings = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
-        ksize = (3, 3)
+        strides = [1, 1, 1, 2, 1, 1, 1, 2, 1, 1, 1, 2, 1, 1, 2, 1, 1, 2]
+        paddings = [1, 1, 0, 1, 1, 1, 0, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1]
+        kernel_sizes = [
+            (3, 3),
+            (3, 3),
+            (1, 1),
+            (3, 3),
+            (3, 3),
+            (3, 3),
+            (1, 1),
+            (3, 3),
+            (3, 3),
+            (3, 3),
+            (1, 1),
+            (3, 3),
+            (3, 3),
+            (3, 3),
+            (3, 3),
+            (3, 3),
+            (3, 3),
+            (3, 3),
+        ]
         layers = list(
             it.chain.from_iterable(
                 [
-                    layer_type(*dims, ksize, stride, padding)
-                    for layer_type, dims, stride, padding in zip(
-                        layer_types, channels_in_out, strides, paddings
+                    layer_type(in_dim, out_dim, kernel_size, stride, padding)
+                    for layer_type, (
+                        in_dim,
+                        out_dim,
+                    ), kernel_size, stride, padding in zip(
+                        layer_types,
+                        channels_in_out,
+                        kernel_sizes,
+                        strides,
+                        paddings,
                     )
                 ]
             )
         )
+        print(
+            "\n".join(
+                map(
+                    str, (zip(layer_types, channels_in_out, strides, paddings))
+                )
+            )
+        )
 
-        layers.extend([nn.Flatten(1), nn.Linear(512, n_classes)])
+        layers.extend(
+            [
+                nn.BatchNorm2d(512),
+                nn.ReLU(),
+                nn.Flatten(1),
+                nn.Linear(512, n_classes),
+            ]
+        )
         # layers.append(nn.Linear(512, n_classes))
         # layers.append()
         self.layers = nn.Sequential(*layers)
+        print(self.layers)
         ########################
         # END OF YOUR CODE    #
         #######################

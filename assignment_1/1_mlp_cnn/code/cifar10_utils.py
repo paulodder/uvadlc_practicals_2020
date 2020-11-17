@@ -110,10 +110,10 @@ def preprocess_cifar10_data(
 
     if unit_variance:
         # Divide by the std
-        print("HERE")
         std = X_train.std(0)
         X_train /= std
         X_test /= std
+
     # Transpose
     X_train = X_train.transpose(0, 3, 1, 2).astype(np.float32)
     X_test = X_test.transpose(0, 3, 1, 2).astype(np.float32)

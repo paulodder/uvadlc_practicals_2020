@@ -41,8 +41,14 @@ class CustomLayerNormAutograd(nn.Module):
         #######################
         self.n_neurons = n_neurons
         self.eps = eps
-        self.gamma = nn.Parameter((torch.randn(n_neurons)))
-        self.beta = nn.Parameter((torch.randn(n_neurons)))
+        # self.gamma = nn.Parameter(
+        #     (torch.normal(1, 0.00001, size=(n_neurons,)))
+        # )
+        # self.beta = nn.Parameter((torch.normal(0, 0.00001, size=(n_neurons,))))
+        self.gamma = nn.Parameter(
+            (torch.normal(1, 0.00001, size=(n_neurons,)))
+        )
+        self.beta = nn.Parameter((torch.normal(0, 0.00001, size=(n_neurons,))))
         # self.beta = torch.ones(n_neurons) * 0.1
         # self.register_parameter("gamma")
         # self.register_parameter("beta")
@@ -70,7 +76,7 @@ class CustomLayerNormAutograd(nn.Module):
         # PUT YOUR CODE HERE  #
         #######################
         assert self.n_neurons == inp.shape[1]
-        means = inp.mean(1)
+        var, means = torch.var_mean(inp, 1, unbiased=False)
         var = inp.var(1, unbiased=False)
         normalized = (inp - means.reshape(-1, 1)) / torch.sqrt(
             var + self.eps
@@ -133,8 +139,7 @@ class CustomLayerNormManualFunction(torch.autograd.Function):
         ########################
         # PUT YOUR CODE HERE  #
         #######################
-        means = inp.mean(1)
-        var = inp.var(1, unbiased=True)
+        var, means = torch.var_mean(inp, 1, unbiased=False)
         normalized = (inp - means.reshape(-1, 1)) / torch.sqrt(
             var + eps
         ).reshape(-1, 1)
@@ -142,7 +147,7 @@ class CustomLayerNormManualFunction(torch.autograd.Function):
         out = (normalized * gamma) + beta
         # out = normalized
         ctx.eps = eps
-        ctx.save_for_backward(means, var, inp, normalized, gamma, beta)
+        ctx.save_for_backward(var, means, inp, normalized, gamma, beta)
         ########################
         # END OF YOUR CODE    #
         #######################
@@ -170,32 +175,68 @@ class CustomLayerNormManualFunction(torch.autograd.Function):
         # PUT YOUR CODE HERE  #
         #######################
         grad_input = grad_gamma = grad_beta = None
-        (means, var, inp, inp_normalized, gamma, beta) = ctx.saved_tensors
+        (var, means, inp, inp_normalized, gamma, beta) = ctx.saved_tensors
         eps = ctx.eps
-        M = means.shape[0]
-        means_vert = means.reshape(-1, 1)
-        norm_fact = (var + eps).reshape(-1, 1)
+        M = inp.shape[1]
+        means_vert = means.view(-1, 1)
+        norm_fact = (var + eps).view(-1, 1)
         grad_output_x_gamma = grad_output * gamma
-        grad_output_x_gamma_summed = grad_output_x_gamma.sum(1).reshape(-1, 1)
+        grad_output_x_gamma_summed = (grad_output @ gamma).view(-1, 1)
         if ctx.needs_input_grad[0]:
-            grad_input = (norm_fact ** (-0.5)) * (
-                grad_output_x_gamma - (1 / M) * grad_output_x_gamma_summed
-            ) + (1 / M) * ((norm_fact) ** (-3 / 2)) * (
-                (means_vert - inp)
-                * (grad_output_x_gamma * inp).sum(1).reshape(-1, 1)
-                + (inp * means_vert - means_vert ** 2)
-                * grad_output_x_gamma_summed
-            )
-            # grad_input = (
-            #     (norm_fact ** (-0.5))
-            #     * (grad_output_x_gamma - (1 / M) * grad_output_x_gamma_summed)
-            # ) + (1 / M) * ((norm_fact) ** (-3 / 2)) * (inp - means_vert) * (
-            #     grad_output * (inp - means_vert)
-            # ).sum(
-            #     1
-            # ).reshape(
-            #     -1, 1
+            # grad_input = (norm_fact ** (-0.5)) * (
+            #     grad_output_x_gamma - (1 / M) * grad_output_x_gamma_summed
+            # ) + (1 / M) * ((norm_fact) ** (-3 / 2)) * (
+            #     (means_vert - inp)
+            #     * ((grad_output * inp) * gamma).sum(1).reshape(-1, 1)
+            #     + (means_vert * (inp - means_vert))
+            #     * grad_output_x_gamma_summed
             # )
+            # grad_input = (
+            #     (
+            #         (norm_fact ** (-1 / 2))
+            #         * (
+            #             grad_output_x_gamma
+            #             - ((1 / M) * grad_output_x_gamma_summed)
+            #         )
+            #     )
+            # ) + (
+            #     (1 / M)
+            #     * ((norm_fact) ** (-3 / 2))
+            #     * (
+            #         (
+            #             (means_vert - inp)
+            #             * (grad_output_x_gamma * inp).sum(1).view(-1, 1)
+            #         )
+            #         + (
+            #             means_vert
+            #             * (inp - means_vert)
+            #             * grad_output_x_gamma_summed
+            #         )
+            #     )
+            # )
+            grad_input = (
+                (
+                    (norm_fact ** (-1 / 2))
+                    * (
+                        grad_output_x_gamma
+                        - ((1 / M) * grad_output_x_gamma_summed)
+                    )
+                )
+            ) + (
+                (1 / M)
+                * ((norm_fact) ** (-3 / 2))
+                * (
+                    (
+                        (means_vert - inp)
+                        * ((grad_output_x_gamma * inp).sum(1).view(-1, 1))
+                    )
+                    + (
+                        means_vert
+                        * (inp - means_vert)
+                        * grad_output_x_gamma_summed
+                    )
+                )
+            )
         if ctx.needs_input_grad[1]:
             grad_gamma = (grad_output * inp_normalized).T.sum(1)
         if ctx.needs_input_grad[2]:
@@ -326,7 +367,7 @@ if __name__ == "__main__":
     )
     # gradient check
     grad_correct = torch.autograd.gradcheck(
-        bn_manual_fct.apply, (input, gamma, beta)
+        bn_manual_fct.apply, (input, beta, gamma)
     )
     if grad_correct:
         print("\tgradient check successful")

@@ -6,6 +6,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import matplotlib.pyplot as plt
 import argparse
 import numpy as np
 import os
@@ -14,6 +15,12 @@ import cifar10_utils
 
 import torch
 import torch.nn as nn
+import dotenv
+from pathlib import Path
+
+DOTENV_KEY2VAL = dotenv.dotenv_values()
+PROJECT_DIR = Path(DOTENV_KEY2VAL["PROJECT_DIR"])
+FIGURE_DIR = PROJECT_DIR / "1_mlp_cnn/figures"
 
 # Default constants
 LEARNING_RATE_DEFAULT = 1e-4
@@ -23,7 +30,9 @@ EVAL_FREQ_DEFAULT = 500
 OPTIMIZER_DEFAULT = "ADAM"
 PLOT_DEFAULT = 1
 # Directory in which cifar data is saved
-DATA_DIR_DEFAULT = "./cifar10/cifar-10-batches-py"
+DATA_DIR_DEFAULT = DATA_DIR_DEFAULT = (
+    PROJECT_DIR / "1_mlp_cnn" / "code" / "cifar10/cifar-10-batches-py"
+)
 ACTIVATION_DEFAULT = "ELU"
 FLAGS = None
 OPTIM_NAME2OBJ = {
@@ -61,6 +70,38 @@ def accuracy(predictions, targets):
     return acc
 
 
+def param2fname_prefix(flags):
+    return "_".join(
+        (
+            ["convnet_"]
+            + [
+                f"{k}={v}"
+                for k, v in sorted(
+                    vars(flags).items(), key=lambda key_val: key_val[0]
+                )
+                if k != "data_dir"
+            ]
+        )
+    )
+
+
+def plot_loss_accs(losses, accs):
+    plt.clf()
+    fig, ax = plt.subplots(2, sharex=True)
+    x = [i * int(FLAGS.eval_freq) for i in range(len(losses))]
+    for ind, (name, vals) in enumerate(
+        zip(["loss", "accuracy"], [losses, accs])
+    ):
+        ax[ind].plot(x, vals, label=name)
+        ax[ind].set_xlabel("# batches trained on")
+        ax[ind].set_ylabel(name)
+    # fig.suptitle("loss and accuracy plots
+    fname = f"{param2fname_prefix(FLAGS)}_loss_accuracy.png"
+    fpath = FIGURE_DIR / fname
+    print(f"saving to {fpath}")
+    plt.savefig(fpath)
+
+
 def train():
     """
     Performs training and evaluation of ConvNet model.
@@ -81,7 +122,7 @@ def train():
 
     convnet = ConvNet(3, 10,)
     optimizer = OPTIM_NAME2OBJ[FLAGS.optimizer](convnet.parameters())
-    name2dset = cifar10_utils.get_cifar10()
+    name2dset = cifar10_utils.get_cifar10(data_dir=DATA_DIR_DEFAULT)
     train_handler = name2dset["train"]
     loss = nn.CrossEntropyLoss()
     nof_steps = 0
@@ -89,7 +130,15 @@ def train():
     # X_test = X_test# .reshape(X_test.shape[0], INPUT_SIZE)
     X_test = torch.from_numpy(X_test)
     y_test = torch.from_numpy(y_test).argmax(1)
-    while nof_steps < FLAGS.max_steps:
+    while nof_steps <= FLAGS.max_steps:
+        if (nof_steps % FLAGS.eval_freq) == 0:
+            with torch.no_grad():
+                y_pred = convnet.forward(X_test)
+                acc = accuracy(y_pred, y_test)
+                accs.append(acc)
+                losses.append(loss(y_pred, y_test))
+                print(f"{nof_steps} batches:\tAccuracy {acc}")
+        print(nof_steps)
         # print("step")
         optimizer.zero_grad()
         convnet.zero_grad()
@@ -101,14 +150,10 @@ def train():
         loss_output = loss(preds, y_train)
         loss_output.backward()
         optimizer.step()
-        if (nof_steps % FLAGS.eval_freq) == 0:
-            with torch.no_grad():
-                y_pred = convnet.forward(X_test)
-                acc = accuracy(y_pred, y_test)
-                accs.append(acc)
-                losses.append(loss(y_pred, y_test))
-                print(f"{nof_steps} batches:\tAccuracy {acc}")
         nof_steps += 1
+    if FLAGS.plot:
+        plot_loss_accs(losses, accs)
+    nof_steps += 1
 
     # raise NotImplementedError
     ########################
@@ -141,12 +186,6 @@ def main():
 def parse_args():
     parser = argparse.ArgumentParser()
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--learning_rate",
-        type=float,
-        default=LEARNING_RATE_DEFAULT,
-        help="Learning rate",
-    )
     parser.add_argument(
         "--max_steps",
         type=int,
